@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from .letter import Letter
 import asyncio
@@ -11,6 +12,8 @@ class UnlockRequest(BaseModel):
 
 
 app = FastAPI()
+
+app.mount("/static", StaticFiles(directory="src/static"), name="static")
 
 
 @app.post("/api/letter", response_model=Letter)

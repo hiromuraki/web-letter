@@ -6,7 +6,8 @@
             name="viewport"
             content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
         />
-        <title>暖心贺卡 - 性能丝滑版</title>
+        <title>Letter</title>
+        <link rel="icon" href="/static/favicon.ico" type="image/x-icon" />
         <style>
             * {
                 margin: 0;
@@ -471,19 +472,14 @@
                 <div class="envelope-pocket"></div>
                 <div class="envelope-flap"></div>
 
-                <img
-                    class="character-img"
-                    id="avatarBtn"
-                    src="https://dummyimage.com/200x200/f9d794/222222.png&text=Avatar"
-                    alt="封泥"
-                />
-                <div class="click-hint">✨ 点击输入通关密语 ✨</div>
+                <img class="character-img" id="avatarBtn" src="/static/avatar.png" alt="封泥" />
+                <div class="click-hint">✨ 输入口令以开启 ✨</div>
             </div>
         </div>
 
         <div class="password-modal" id="pwdModal">
             <div class="modal-box">
-                <h3>请输入通关密语</h3>
+                <h3>请输入口令</h3>
                 <input
                     type="text"
                     id="pwdInput"
@@ -497,7 +493,6 @@
 
         <script>
             async function getLetter(password) {
-                // 调用 FastAPI 接口
                 const response = await fetch("/api/letter", {
                     method: "POST",
                     headers: {
@@ -506,13 +501,11 @@
                     body: JSON.stringify({ password: password }),
                 });
 
-                // 如果接口返回错误 (比如 400 密码错误)
                 if (!response.ok) {
                     const errorData = await response.json();
                     throw new Error(errorData.detail || "请求出错啦");
                 }
 
-                // 密码正确，返回信件 JSON 数据
                 return await response.json();
             }
 
@@ -541,7 +534,9 @@
             });
 
             async function handleSubmit() {
-                if (!submitBtn.classList.contains("ready")) return;
+                if (!submitBtn.classList.contains("ready")) {
+                    return;
+                }
 
                 const pwd = pwdInput.value;
                 pwdError.style.display = "none";
