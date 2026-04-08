@@ -21,7 +21,7 @@ async def get_letter(request: UnlockRequest):
         raise HTTPException(status_code=400, detail="通关密语不对哦，再想想~")
 
     try:
-        letter_file_path = os.getenv("LETTER_FILE_PATH")
+        letter_file_path = os.getenv("LETTER_FILE")
         if not letter_file_path:
             raise HTTPException(status_code=400, detail="没有信件")
         letter = Letter.load(letter_file_path)
