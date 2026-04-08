@@ -4,6 +4,11 @@ on:
     push:
         branches:
             - main
+        paths:
+            - "src/**"
+            - "pyproject.toml"
+            - "uv.lock"
+            - "Dockerfile"
 
 jobs:
     build-and-push:
