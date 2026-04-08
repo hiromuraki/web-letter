@@ -11,6 +11,4 @@ wheels/
 
 # Data
 /data/
-
-# .env
-.env
+/web-letter.prod.yml
