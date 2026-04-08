@@ -11,4 +11,4 @@ wheels/
 
 # Data
 /data/
-/web-letter.prod.yml
+/k8s.*.yml
