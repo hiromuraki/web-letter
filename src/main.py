@@ -1,8 +1,9 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-import asyncio
 from .letter import Letter
+import asyncio
+import os
 
 
 class UnlockRequest(BaseModel):
@@ -16,11 +17,14 @@ app = FastAPI()
 async def get_letter(request: UnlockRequest):
     await asyncio.sleep(0.2)
 
-    if request.password.strip() != "aaa":
+    if request.password.strip() != os.getenv("LETTER_PASSWORD", "web-letter"):
         raise HTTPException(status_code=400, detail="通关密语不对哦，再想想~")
 
     try:
-        letter = Letter.load("./data/letter.txt")
+        letter_file_path = os.getenv("LETTER_FILE_PATH")
+        if not letter_file_path:
+            raise HTTPException(status_code=400, detail="没有信件")
+        letter = Letter.load(letter_file_path)
         return letter
     except FileNotFoundError:
         raise HTTPException(status_code=500, detail="服务器里找不到信件文件啦！")
