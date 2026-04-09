@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
@@ -20,21 +21,6 @@ type UnlockRequest struct {
 // 对应 FastAPI 默认抛出异常的 JSON 格式 {"detail": "..."}
 type ErrorResponse struct {
 	Detail string `json:"detail"`
-}
-
-// CORS 中间件 (保持不变)
-func corsMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		next(w, r)
-	}
 }
 
 // 封装一个快捷返回错误 JSON 的小助手
@@ -69,6 +55,8 @@ func loadConfig() Config {
 		config.Port = "8000"
 	}
 
+	fmt.Printf("配置加载完成")
+
 	return config
 }
 
@@ -95,7 +83,7 @@ func registerApiRoutes() {
 		}
 	}()
 
-	http.HandleFunc("/api/letter", corsMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/api/letter", func(w http.ResponseWriter, r *http.Request) {
 		// 校验：仅允许 POST 请求
 		if r.Method != http.MethodPost {
 			writeJSONError(w, http.StatusMethodNotAllowed, "请求方法错误")
@@ -134,7 +122,7 @@ func registerApiRoutes() {
 		// 校验通过，返回 200 OK 和信件 JSON
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(letter)
-	}))
+	})
 }
 
 func main() {
