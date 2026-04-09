@@ -5,8 +5,10 @@ on:
         branches:
             - main
         paths:
+            - ".github/workflows/build-binary.yml"
             - "core/**"
             - "static/**"
+            - "main.go"
             - "go.mod"
             - "go.sum"
     workflow_dispatch:
