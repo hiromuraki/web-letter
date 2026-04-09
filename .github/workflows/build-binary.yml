@@ -2,9 +2,13 @@ name: Build Go Project
 
 on:
     push:
-        branches: ["main"]
-    pull_request:
-        branches: ["main"]
+        branches:
+            - main
+        paths:
+            - "core/**"
+            - "static/**"
+            - "go.mod"
+            - "go.sum"
     workflow_dispatch:
 
 jobs:

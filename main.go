@@ -97,9 +97,6 @@ func registerApiRoutes() {
 			return
 		}
 
-		// 模拟网络延迟，让前端的 loading 效果更明显
-		time.Sleep(200 * time.Millisecond)
-
 		// 获取环境变量中的密码，默认 "web-letter"
 		targetPwd := config.LetterPassword
 		if targetPwd == "" {

@@ -9,6 +9,7 @@ on:
             - "static/**"
             - "go.mod"
             - "go.sum"
+    workflow_dispatch:
 
 jobs:
     build-and-push:
