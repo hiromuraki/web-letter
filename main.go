@@ -3,7 +3,6 @@ package main
 import (
 	"embed"
 	"encoding/json"
-	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
@@ -31,8 +30,10 @@ func writeJSONError(w http.ResponseWriter, statusCode int, detail string) {
 }
 
 type Config struct {
-	LetterFilePath string
+	LetterFile     string
 	LetterPassword string
+	MusicFile      string
+	AvatarFile     string
 	Port           string
 }
 
@@ -40,22 +41,30 @@ var config Config
 
 func loadConfig() Config {
 	config := Config{
-		LetterFilePath: os.Getenv("LETTER_FILE"),
+		LetterFile:     os.Getenv("LETTER_FILE"),
+		MusicFile:      os.Getenv("MUSIC_FILE"),
+		AvatarFile:     os.Getenv("AVATAR_FILE"),
 		LetterPassword: os.Getenv("LETTER_PASSWORD"),
 		Port:           os.Getenv("PORT"),
 	}
 
-	if config.LetterFilePath == "" {
-		config.LetterFilePath = "/data/letter.txt"
+	if config.LetterFile == "" {
+		config.LetterFile = "/data/letter"
 	}
 	if config.LetterPassword == "" {
 		config.LetterPassword = "000000"
+	}
+	if config.MusicFile == "" {
+		config.MusicFile = "/data/music"
+	}
+	if config.AvatarFile == "" {
+		config.AvatarFile = "/data/avatar"
 	}
 	if config.Port == "" {
 		config.Port = "8000"
 	}
 
-	fmt.Printf("配置加载完成")
+	log.Printf("配置加载完成")
 
 	return config
 }
@@ -72,7 +81,7 @@ func registerStaticFilesRoute() {
 }
 
 func registerApiRoutes() {
-	letterCache := &core.LetterCache{FilePath: config.LetterFilePath}
+	letterCache := &core.LetterCache{FilePath: config.LetterFile}
 	letterCache.LoadFromDisk()
 
 	// 后台检视信件文件的变化，每 5 秒钟检查一次
@@ -84,7 +93,6 @@ func registerApiRoutes() {
 	}()
 
 	http.HandleFunc("/api/letter", func(w http.ResponseWriter, r *http.Request) {
-		// 校验：仅允许 POST 请求
 		if r.Method != http.MethodPost {
 			writeJSONError(w, http.StatusMethodNotAllowed, "请求方法错误")
 			return
@@ -119,6 +127,24 @@ func registerApiRoutes() {
 		// 校验通过，返回 200 OK 和信件 JSON
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(letter)
+	})
+
+	http.HandleFunc("/api/music", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeJSONError(w, http.StatusMethodNotAllowed, "只支持 GET 请求")
+			return
+		}
+
+		http.ServeFile(w, r, config.MusicFile)
+	})
+
+	http.HandleFunc("/api/avatar", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeJSONError(w, http.StatusMethodNotAllowed, "只支持 GET 请求")
+			return
+		}
+
+		http.ServeFile(w, r, config.AvatarFile)
 	})
 }
 
