@@ -1,3 +1,6 @@
 #!/bin/bash
 
-uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8000 --workers 1
+export LETTER_FILE=./sample-data/letter.txt
+export LETTER_PASSWORD=000000
+
+go run main.go

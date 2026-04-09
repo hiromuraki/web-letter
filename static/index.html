@@ -7,7 +7,6 @@
             content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
         />
         <title>Letter</title>
-        <link rel="icon" href="/static/favicon.ico" type="image/x-icon" />
         <style>
             * {
                 margin: 0;
@@ -15,7 +14,6 @@
                 box-sizing: border-box;
             }
 
-            /* 🌟 优化1：引入 dvh 解决底部工具栏遮挡问题 */
             body {
                 min-height: 100vh;
                 min-height: 100dvh;
@@ -26,7 +24,6 @@
                 -webkit-tap-highlight-color: transparent;
             }
 
-            /* 🌟 优化2：SVG噪点层强制开启 GPU 硬件加速，防止拖慢全局动画 */
             .noise {
                 position: fixed;
                 top: 0;
@@ -82,7 +79,6 @@
                 z-index: 3;
             }
 
-            /* 🌟 优化3：移除 box-shadow 动画，用 GPU 友好的方式实现高度变化 */
             .letter-body {
                 position: relative;
                 height: 180px;
@@ -90,13 +86,12 @@
                 border-radius: 12px;
                 overflow: hidden;
                 pointer-events: auto;
-                box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1); /* 固定基础阴影 */
-                will-change: height; /* 提前告知浏览器高度会变 */
+                box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+                will-change: height;
                 transform: translateZ(0);
                 transition: height 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) 0.5s;
             }
 
-            /* 🌟 优化4：复古边框移至伪元素，仅改变透明度 (Opacity动画极度丝滑) */
             .letter-body::after {
                 content: "";
                 position: absolute;
@@ -166,7 +161,6 @@
                 transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
             }
 
-            /* 🌟 优化5：去除头像复杂的阴影过渡 */
             .character-img {
                 position: absolute;
                 top: 95px;
@@ -343,10 +337,6 @@
                 display: none;
             }
 
-            /* =========================================
-               🚀 展开动画指令层 (兼容 dvh 的精确计算)
-               ========================================= */
-
             .mail-scene.is-opened .envelope-flap {
                 transform: rotateX(180deg);
                 opacity: 0;
@@ -472,7 +462,7 @@
                 <div class="envelope-pocket"></div>
                 <div class="envelope-flap"></div>
 
-                <img class="character-img" id="avatarBtn" src="/static/avatar.png" alt="封泥" />
+                <img class="character-img" id="avatarBtn" src="/avatar.png" alt="封泥" />
                 <div class="click-hint">✨ 输入口令以开启 ✨</div>
             </div>
         </div>
@@ -493,7 +483,7 @@
 
         <script>
             async function getLetter(password) {
-                const response = await fetch("/api/letter", {
+                const response = await fetch("http://localhost:8000/api/letter", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
