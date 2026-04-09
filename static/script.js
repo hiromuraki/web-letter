@@ -1,7 +1,14 @@
 // 🌟 音乐淡入逻辑
-const bgMusic = document.getElementById("bgMusic");
 function fadeAudioIn() {
+    const bgMusic = document.getElementById("bgMusic");
+
+    if (!bgMusic.getAttribute("src")) {
+        bgMusic.setAttribute("src", "/api/music");
+        bgMusic.load();
+    }
+
     bgMusic.volume = 0;
+
     // 利用用户刚刚点击按钮的交互，安全触发播放
     bgMusic
         .play()
