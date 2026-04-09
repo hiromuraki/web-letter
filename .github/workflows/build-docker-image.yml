@@ -5,10 +5,10 @@ on:
         branches:
             - main
         paths:
-            - "src/**"
-            - "pyproject.toml"
-            - "uv.lock"
-            - "Dockerfile"
+            - "core/**"
+            - "static/**"
+            - "go.mod"
+            - "go.sum"
 
 jobs:
     build-and-push:
