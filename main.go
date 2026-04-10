@@ -12,12 +12,12 @@ import (
 	"web-letter-go/core"
 )
 
-// 🌟 1. 定义与前端交互的数据结构
+// 义与前端交互的数据结构
 type UnlockRequest struct {
 	Password string `json:"password"`
 }
 
-// 对应 FastAPI 默认抛出异常的 JSON 格式 {"detail": "..."}
+// 异常的 JSON 格式 {"detail": "..."}
 type ErrorResponse struct {
 	Detail string `json:"detail"`
 }
@@ -33,7 +33,6 @@ type Config struct {
 	LetterFile     string
 	LetterPassword string
 	MusicFile      string
-	AvatarFile     string
 	Port           string
 }
 
@@ -43,7 +42,6 @@ func loadConfig() Config {
 	config := Config{
 		LetterFile:     os.Getenv("LETTER_FILE"),
 		MusicFile:      os.Getenv("MUSIC_FILE"),
-		AvatarFile:     os.Getenv("AVATAR_FILE"),
 		LetterPassword: os.Getenv("LETTER_PASSWORD"),
 		Port:           os.Getenv("PORT"),
 	}
@@ -56,9 +54,6 @@ func loadConfig() Config {
 	}
 	if config.MusicFile == "" {
 		config.MusicFile = "/data/music"
-	}
-	if config.AvatarFile == "" {
-		config.AvatarFile = "/data/avatar"
 	}
 	if config.Port == "" {
 		config.Port = "8000"
@@ -105,15 +100,9 @@ func registerApiRoutes() {
 			return
 		}
 
-		// 获取环境变量中的密码，默认 "web-letter"
-		targetPwd := config.LetterPassword
-		if targetPwd == "" {
-			targetPwd = "web-letter"
-		}
-
 		// 校验密码
-		if strings.TrimSpace(req.Password) != targetPwd {
-			writeJSONError(w, http.StatusBadRequest, "通关密语不对哦，再想想~")
+		if strings.TrimSpace(req.Password) != config.LetterPassword {
+			writeJSONError(w, http.StatusBadRequest, "口令无效哦")
 			return
 		}
 
@@ -136,15 +125,6 @@ func registerApiRoutes() {
 		}
 
 		http.ServeFile(w, r, config.MusicFile)
-	})
-
-	http.HandleFunc("/api/avatar", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			writeJSONError(w, http.StatusMethodNotAllowed, "只支持 GET 请求")
-			return
-		}
-
-		http.ServeFile(w, r, config.AvatarFile)
 	})
 }
 

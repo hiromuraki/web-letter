@@ -1,166 +1,235 @@
-// 🌟 音乐淡入逻辑
-function fadeAudioIn() {
-    const bgMusic = document.getElementById("bgMusic");
+// 设置日期
+document.getElementById("currentDate").innerText = new Date().toLocaleString();
 
-    if (!bgMusic.getAttribute("src")) {
-        bgMusic.setAttribute("src", "/api/music");
-        bgMusic.load();
-    }
-
-    bgMusic.volume = 0;
-
-    // 利用用户刚刚点击按钮的交互，安全触发播放
-    bgMusic
-        .play()
-        .then(() => {
-            let volume = 0;
-            const fadeInterval = setInterval(() => {
-                if (volume < 0.5) {
-                    // 将最高音量限制在 0.5，防刺耳
-                    volume += 0.05;
-                    bgMusic.volume = Math.min(volume, 0.5);
-                } else {
-                    clearInterval(fadeInterval);
-                }
-            }, 100); // 100ms * 10次 = 1秒渐变完毕
-        })
-        .catch((e) => console.warn("背景音乐播放可能被拦截:", e));
-}
-
-async function getLetter(password) {
-    const response = await fetch("/api/letter", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ password: password }),
-    });
-
-    if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || "请求出错啦");
-    }
-
-    return await response.json();
-}
-
-const avatarBtn = document.getElementById("avatarBtn");
-const scene = document.getElementById("scene");
-const pwdModal = document.getElementById("pwdModal");
-const pwdInput = document.getElementById("pwdInput");
+const paper = document.getElementById("paper");
+const lcdScreen = document.querySelector(".lcd-screen");
 const submitBtn = document.getElementById("submitBtn");
-const pwdError = document.getElementById("pwdError");
+const pwdInput = document.getElementById("pwdInput");
+const powerLight = document.getElementById("powerLight");
+const paperHeader = document.getElementById("paperHeader");
+const pullHint = document.getElementById("pullHint");
+const letterAvatar = document.getElementById("letterAvatar");
+const letterTitle = document.getElementById("letterTitle");
+const paperContent = document.getElementById("paperContent");
 
-const cardTitle = document.getElementById("cardTitle");
-const cardContent = document.getElementById("cardContent");
-const cardSign = document.getElementById("cardSign");
+let isPrinted = false;
+let currentTranslateY = 100; // 初始百分比
+let signalFrameIndex = 0;
+let signalFrameTimer = null;
+let hasTransmissionError = false;
+const signalFrames = ["信号传输 ▇ ▃ ▃", "信号传输 ▅ ▇ ▃", "信号传输 ▃ ▅ ▇", "信号传输 ▃ ▃ ▅"];
+const requestTimeoutMs = 10000; // 10 秒超时
 
-// 🌟 核心逻辑：头像点击的多态处理
-avatarBtn.addEventListener("click", () => {
-    if (scene.classList.contains("is-opened")) {
-        // 已开信状态：点击弹出爱心彩蛋
-        popHeart();
-    } else {
-        // 未开信状态：呼出密码弹窗
-        pwdModal.classList.add("show");
-        pwdInput.focus();
-    }
-});
-
-// 生成爱心的方法
-function popHeart() {
-    const heart = document.createElement("div");
-    heart.className = "floating-heart";
-    // 随机选择小元素
-    heart.innerText = ["❤️", "💖", "✨", "💕"][Math.floor(Math.random() * 4)];
-
-    // 获取头像位置，计算发射点
-    const rect = avatarBtn.getBoundingClientRect();
-    // 让爱心有一点点左右随机偏移，更自然
-    const offsetX = (Math.random() - 0.5) * 30;
-
-    heart.style.left = `${rect.left + rect.width / 2 + offsetX}px`;
-    heart.style.top = `${rect.top}px`;
-
-    document.body.appendChild(heart);
-
-    // 1.2秒动画结束后自动销毁 DOM
-    setTimeout(() => heart.remove(), 1200);
+function sleep(ms) {
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-pwdInput.addEventListener("input", () => {
-    if (pwdInput.value.trim().length > 0) {
-        submitBtn.classList.add("ready");
-    } else {
-        submitBtn.classList.remove("ready");
-    }
-});
+async function fetchLetter(passcode) {
+    await sleep(2000);
 
-async function handleSubmit() {
-    if (!submitBtn.classList.contains("ready")) {
-        return;
-    }
-
-    const pwd = pwdInput.value;
-    pwdError.style.display = "none";
-    submitBtn.innerText = "开启中...";
-    submitBtn.style.opacity = "0.7";
+    const abortController = new AbortController();
+    const timeoutId = window.setTimeout(() => {
+        abortController.abort();
+    }, requestTimeoutMs);
 
     try {
-        const data = await getLetter(pwd);
+        const response = await fetch("/api/letter", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                password: passcode,
+            }),
+            signal: abortController.signal,
+        });
 
-        cardTitle.innerText = `✨ ${data.title} ✨`;
+        if (!response.ok) {
+            let detailMessage = `错误：${response.status}`;
 
-        const paragraphs = data.content.split("\n").filter((p) => p.trim());
-        cardContent.innerHTML = paragraphs.map((p) => `<p>${p}</p>`).join("");
-        cardSign.innerText = `—— ${data.sign}`;
+            try {
+                const errorBody = await response.json();
+                if (errorBody && typeof errorBody.detail === "string" && errorBody.detail.trim()) {
+                    detailMessage = errorBody.detail.trim();
+                }
+            } catch {
+                // Keep the fallback status message when the error body is not valid JSON.
+            }
 
-        pwdModal.classList.remove("show");
+            const error = new Error(detailMessage);
+            error.name = "BackendError";
+            throw error;
+        }
 
-        setTimeout(() => {
-            scene.classList.add("is-opened");
-            // 🌟 触发背景音乐淡入
-            fadeAudioIn();
-
-            setTimeout(() => {
-                avatarBtn.style.transition = "transform 0.15s cubic-bezier(0.4, 0, 0.2, 1)";
-            }, 1200);
-        }, 150);
-    } catch (err) {
-        pwdError.innerText = err.message;
-        pwdError.style.display = "block";
-        submitBtn.innerText = "拆开信件";
-        submitBtn.style.opacity = "1";
+        return await response.json();
+    } finally {
+        window.clearTimeout(timeoutId);
     }
 }
 
-submitBtn.addEventListener("click", handleSubmit);
+function renderLetter(letter) {
+    letterAvatar.src = letter.avatar;
+    letterTitle.innerText = letter.title;
 
-pwdInput.addEventListener("keypress", (e) => {
-    if (e.key === "Enter") handleSubmit();
-});
+    paperContent.innerHTML = "";
 
-pwdModal.addEventListener("click", (e) => {
-    if (e.target === pwdModal) {
-        pwdModal.classList.remove("show");
+    const paragraphs = letter.content
+        .split(/\n+/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+
+    for (const paragraphText of paragraphs) {
+        const paragraph = document.createElement("p");
+        paragraph.innerText = paragraphText;
+        paperContent.appendChild(paragraph);
+    }
+
+    const signature = document.createElement("p");
+    signature.className = "letter-signature";
+    signature.innerText = `—— ${letter.sign}`;
+    paperContent.appendChild(signature);
+}
+
+function startSignalCaptureAnimation() {
+    signalFrameIndex = 0;
+    pwdInput.value = signalFrames[signalFrameIndex];
+
+    signalFrameTimer = window.setInterval(() => {
+        signalFrameIndex = (signalFrameIndex + 1) % signalFrames.length;
+        pwdInput.value = signalFrames[signalFrameIndex];
+    }, 220);
+}
+
+function stopSignalCaptureAnimation() {
+    if (signalFrameTimer !== null) {
+        window.clearInterval(signalFrameTimer);
+        signalFrameTimer = null;
+    }
+}
+
+function resetTransmissionState() {
+    hasTransmissionError = false;
+    stopSignalCaptureAnimation();
+    submitBtn.disabled = false;
+    pwdInput.disabled = false;
+    pwdInput.style.pointerEvents = "auto";
+    powerLight.classList.remove("loading", "ready", "error");
+    pwdInput.value = "";
+    pwdInput.focus();
+}
+
+function showTransmissionError(message) {
+    hasTransmissionError = true;
+    stopSignalCaptureAnimation();
+    powerLight.classList.remove("loading");
+    powerLight.classList.add("error");
+    pwdInput.value = message;
+}
+
+function abbreviateDetail(detail) {
+    const text = String(detail || "").trim();
+    if (!text) {
+        return "传输发生错误";
+    }
+
+    const maxLength = 6;
+    return text.length <= maxLength ? text : `${text.slice(0, maxLength)}...`;
+}
+
+// 1. 启动逻辑
+submitBtn.addEventListener("click", async () => {
+    if (pwdInput.value.trim() === "") return;
+
+    const passcode = pwdInput.value.trim();
+    hasTransmissionError = false;
+
+    submitBtn.disabled = true;
+    pwdInput.disabled = true;
+    pwdInput.style.pointerEvents = "none";
+    startSignalCaptureAnimation();
+    powerLight.classList.remove("ready");
+    powerLight.classList.add("loading");
+
+    try {
+        const letter = await fetchLetter(passcode);
+        renderLetter(letter);
+
+        await sleep(1200);
+        stopSignalCaptureAnimation();
+        pwdInput.value = "已就绪";
+        powerLight.classList.remove("loading");
+        powerLight.classList.add("ready");
+
+        // 弹出纸张头部
+        paper.style.transition = "transform 2s cubic-bezier(0.19, 1, 0.22, 1)";
+        currentTranslateY = 85; // 露出一点头部
+        paper.style.transform = `translateY(${currentTranslateY}%)`;
+
+        await sleep(1000);
+        pullHint.style.opacity = "1";
+        pwdInput.value = "向上拉动纸张";
+        isPrinted = true;
+    } catch (error) {
+        if (error && error.name === "AbortError") {
+            showTransmissionError("传输超时");
+            return;
+        }
+
+        stopSignalCaptureAnimation();
+        powerLight.classList.remove("loading");
+        powerLight.classList.add("error");
+
+        if (error && error.name === "BackendError") {
+            showTransmissionError(abbreviateDetail(error.message));
+            return;
+        }
+
+        showTransmissionError("传输发生错误");
     }
 });
 
-// 星星交互
-function createStar(x, y) {
-    const star = document.createElement("div");
-    star.className = "star";
-    star.style.left = `${x}px`;
-    star.style.top = `${y}px`;
-    star.style.position = "fixed";
-    star.style.zIndex = "5";
-    star.style.animation = "twinkle 0.8s ease-out forwards";
-    document.body.appendChild(star);
-    setTimeout(() => star.remove(), 800);
-}
+lcdScreen.addEventListener("click", () => {
+    if (!hasTransmissionError) return;
 
-document.addEventListener("click", (e) => {
-    if (!e.target.closest(".envelope-wrapper") && !e.target.closest(".password-modal")) {
-        createStar(e.clientX, e.clientY);
+    resetTransmissionState();
+});
+
+// 2. 物理拉动逻辑
+let startY = 0;
+let startTranslateY = 0;
+
+paper.addEventListener("pointerdown", (e) => {
+    if (!isPrinted) return;
+    paper.setPointerCapture(e.pointerId);
+    startY = e.clientY;
+    startTranslateY = currentTranslateY;
+    paper.style.transition = "none";
+    pullHint.style.opacity = "0";
+});
+
+paper.addEventListener("pointermove", (e) => {
+    if (!startY) return;
+
+    const deltaY = e.clientY - startY;
+    // 🌟 核心修复 1：用信纸的实际高度来计算百分比，实现绝对 1:1 跟手！
+    const paperHeight = paper.offsetHeight;
+    const deltaPercent = (deltaY / paperHeight) * 100;
+
+    let nextY = startTranslateY + deltaPercent;
+
+    // 🌟 核心修复 2：增加顶部和底部的硬物理边界
+    if (nextY > 85) nextY = 85; // 不能塞回机器深处
+    if (nextY < 0) nextY = 0; // 0% 代表拉到底了，彻底锁死
+
+    currentTranslateY = nextY;
+    paper.style.transform = `translateY(${currentTranslateY}%)`;
+});
+
+paper.addEventListener("pointerup", () => {
+    startY = 0;
+    // 可以在这里加一点点惯性或对齐逻辑
+    // 目前保持不动，增强物理停留感
+    if (currentTranslateY < 80) {
+        pwdInput.value = "阅读模式";
     }
 });

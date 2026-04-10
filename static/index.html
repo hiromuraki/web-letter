@@ -6,52 +6,31 @@
             name="viewport"
             content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
         />
-        <rel typ></rel>
+        <title>LETTER</title>
         <link rel="stylesheet" href="style.css" />
         <script src="script.js" defer></script>
-        <title>Letter</title>
     </head>
     <body>
-        <div class="noise"></div>
-
-        <audio id="bgMusic" loop preload="none"></audio>
-
-        <div class="mail-scene" id="scene">
-            <div class="envelope-wrapper">
-                <div class="envelope-back"></div>
-                <div class="letter-wrapper">
-                    <div class="letter-body">
-                        <div class="letter-scroll-area">
-                            <div class="stamp-decor">❦</div>
-                            <div class="text-content" id="letterContainer">
-                                <div class="card-title-wrap">
-                                    <h1 class="card-title" id="cardTitle"></h1>
-                                </div>
-                                <div class="card-content" id="cardContent"></div>
-                                <div class="card-sign" id="cardSign"></div>
-                            </div>
-                        </div>
-                    </div>
+        <div class="paper-slot-area">
+            <div class="paper" id="paper">
+                <div class="pull-hint" id="pullHint">PULL UP</div>
+                <div class="paper-header" id="paperHeader">
+                    <img src="" alt="Avatar" class="avatar" id="letterAvatar" />
+                    <h2 id="letterTitle">DECRYPTED_LOG</h2>
+                    <div class="date" id="currentDate"></div>
                 </div>
-                <div class="envelope-pocket"></div>
-                <div class="envelope-flap"></div>
-
-                <img class="character-img" id="avatarBtn" src="/api/avatar" alt="封泥" />
-                <div class="click-hint">✨ 输入口令以开启 ✨</div>
+                <div class="paper-content" id="paperContent"></div>
             </div>
         </div>
 
-        <div class="password-modal" id="pwdModal">
-            <div class="modal-box">
-                <h3>请输入口令</h3>
-                <input
-                    type="text"
-                    id="pwdInput"
-                    placeholder="输入任意内容即可"
-                    autocomplete="off"
-                />
-                <div class="modal-error" id="pwdError">内容不能为空哦</div>
-                <button id="submitBtn">拆开信件</button>
+        <div class="machine-container">
+            <div class="machine-body">
+                <div class="machine-slit"></div>
+                <div class="lcd-screen">
+                    <input type="text" id="pwdInput" placeholder="点击输入口令" maxlength="8" />
+                    <div class="power-light" id="powerLight"></div>
+                </div>
+                <button id="submitBtn">接收</button>
             </div>
         </div>
     </body>
