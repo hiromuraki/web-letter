@@ -29,8 +29,8 @@ web-letter/
 | :---------------- | :--------------- | :----------------- |
 | `PORT`            | 服务运行端口     | `8000`             |
 | `LETTER_PASSWORD` | 贺卡解锁口令     | `000000`           |
-| `LETTER_FILE`     | 信件文本物理路径 | `/data/letter.txt` |
-| `MUSIC_FILE`      | 背景音乐物理路径 | `/data/music.mp3`  |
+| `LETTER_FILE`     | 信件文本物理路径 | `/data/letter` |
+| `MUSIC_FILE`      | 背景音乐物理路径 | `/data/music`  |
 
 **信件文本 (`letter`) 格式要求：**
 
