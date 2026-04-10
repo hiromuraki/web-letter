@@ -16,6 +16,7 @@ type Letter struct {
 	Avatar  string `json:"avatar"`
 	Content string `json:"content"`
 	Sign    string `json:"sign"`
+	Music   string `json:"music"`
 }
 
 // LetterCache 是我们的“智能信箱”
@@ -54,6 +55,8 @@ func parseLetter(filePath string) (*Letter, error) {
 				letter.Sign = strings.TrimSpace(after)
 			} else if after, ok := strings.CutPrefix(line, "AVATAR:"); ok {
 				letter.Avatar = strings.TrimSpace(after)
+			} else if after, ok := strings.CutPrefix(line, "MUSIC:"); ok {
+				letter.Music = strings.TrimSpace(after)
 			} else if line == "" && letter.Title != "" {
 				// 遇到空行，且必要的头信息已解析，标记进入正文阶段
 				isContentSection = true

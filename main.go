@@ -32,7 +32,6 @@ func writeJSONError(w http.ResponseWriter, statusCode int, detail string) {
 type Config struct {
 	LetterFile     string
 	LetterPassword string
-	MusicFile      string
 	Port           string
 }
 
@@ -41,7 +40,6 @@ var config Config
 func loadConfig() Config {
 	config := Config{
 		LetterFile:     os.Getenv("LETTER_FILE"),
-		MusicFile:      os.Getenv("MUSIC_FILE"),
 		LetterPassword: os.Getenv("LETTER_PASSWORD"),
 		Port:           os.Getenv("PORT"),
 	}
@@ -51,9 +49,6 @@ func loadConfig() Config {
 	}
 	if config.LetterPassword == "" {
 		config.LetterPassword = "000000"
-	}
-	if config.MusicFile == "" {
-		config.MusicFile = "/data/music"
 	}
 	if config.Port == "" {
 		config.Port = "8000"
@@ -109,22 +104,13 @@ func registerApiRoutes() {
 		// 获取信件内容 (如果文件不存在或加载失败，这里 cache.Get() 可能返回 nil)
 		letter := letterCache.Get()
 		if letter == nil {
-			writeJSONError(w, http.StatusInternalServerError, "服务器里找不到信件文件啦！")
+			writeJSONError(w, http.StatusInternalServerError, "当前没有信件哦")
 			return
 		}
 
 		// 校验通过，返回 200 OK 和信件 JSON
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(letter)
-	})
-
-	http.HandleFunc("/api/music", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			writeJSONError(w, http.StatusMethodNotAllowed, "只支持 GET 请求")
-			return
-		}
-
-		http.ServeFile(w, r, config.MusicFile)
 	})
 }
 
