@@ -70,7 +70,7 @@ func registerStaticFilesRoute() {
 	http.Handle("/", http.FileServer(http.FS(staticFiles)))
 }
 
-func registerApiRoutes() {
+func registerLetterApiRoute() {
 	letterCache := &core.LetterCache{FilePath: config.LetterFile}
 	letterCache.LoadFromDisk()
 
@@ -118,7 +118,7 @@ func main() {
 	config = loadConfig()
 
 	registerStaticFilesRoute()
-	registerApiRoutes()
+	registerLetterApiRoute()
 
 	log.Printf("🚀 服务器已启动 (Port=%s)", config.Port)
 	err := http.ListenAndServe(":"+config.Port, nil)

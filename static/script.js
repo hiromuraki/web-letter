@@ -15,17 +15,255 @@ const paperContent = document.getElementById("paperContent");
 let isPrinted = false;
 let currentTranslateY = 100; // 初始百分比
 let signalFrameIndex = 0;
-let signalFrameTimer = null;
 let hasTransmissionError = false;
+let activeMusicAudio = null;
+let activeMusicToken = 0;
+let signalAnimationToken = 0;
+let spectrumAnimationToken = 0;
 const signalFrames = ["信号传输 ▇ ▃ ▃", "信号传输 ▅ ▇ ▃", "信号传输 ▃ ▅ ▇", "信号传输 ▃ ▃ ▅"];
+const spectrumGlyphs = ["▇", "▃", "▅"];
 const requestTimeoutMs = 10000; // 10 秒超时
+const musicFadeDurationMs = 1800;
+const musicMaxVolume = 0.4;
+const musicLoopLeadSeconds = musicFadeDurationMs / 1000 + 0.15;
+const spectrumFrameIntervalMs = 180;
+const hapticPatterns = {
+    confirm: 50,
+    success: [30, 50, 30],
+    error: [40, 60, 40],
+};
 
 function sleep(ms) {
     return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
+function triggerHapticFeedback(pattern) {
+    if (typeof navigator === "undefined" || typeof navigator.vibrate !== "function") {
+        return;
+    }
+
+    navigator.vibrate(pattern);
+}
+
+function stopSpectrumAnimation() {
+    spectrumAnimationToken += 1;
+}
+
+function buildSpectrumFrame() {
+    const frame = [];
+
+    for (let index = 0; index < 5; index += 1) {
+        const randomIndex = Math.floor(Math.random() * spectrumGlyphs.length);
+        frame.push(spectrumGlyphs[randomIndex]);
+    }
+
+    return frame.join(" ");
+}
+
+function renderSpectrumFrame() {
+    pwdInput.value = buildSpectrumFrame();
+}
+
+async function startSpectrumAnimation() {
+    const token = ++spectrumAnimationToken;
+
+    renderSpectrumFrame();
+
+    while (token === spectrumAnimationToken) {
+        await sleep(spectrumFrameIntervalMs);
+
+        if (token !== spectrumAnimationToken) {
+            return;
+        }
+
+        renderSpectrumFrame();
+    }
+}
+
+function getLetterMusicUrl(letter) {
+    if (!letter || typeof letter !== "object") {
+        return "";
+    }
+
+    const musicUrl = typeof letter.Music === "string" ? letter.Music : letter.music;
+    return typeof musicUrl === "string" ? musicUrl.trim() : "";
+}
+
+function teardownMusicAudio(audio) {
+    if (!audio) {
+        return;
+    }
+
+    if (audio.__fadeFrameId) {
+        window.cancelAnimationFrame(audio.__fadeFrameId);
+        audio.__fadeFrameId = null;
+    }
+
+    if (audio.__loopHandler) {
+        audio.removeEventListener("timeupdate", audio.__loopHandler);
+        audio.__loopHandler = null;
+    }
+
+    if (audio.__endedHandler) {
+        audio.removeEventListener("ended", audio.__endedHandler);
+        audio.__endedHandler = null;
+    }
+
+    audio.__loopTransitioning = false;
+}
+
+async function fadeMusicVolume(audio, targetVolume, durationMs, token) {
+    if (!audio) {
+        return;
+    }
+
+    if (audio.__fadeFrameId) {
+        window.cancelAnimationFrame(audio.__fadeFrameId);
+        audio.__fadeFrameId = null;
+    }
+
+    const startVolume = Number.isFinite(audio.volume) ? audio.volume : 0;
+    if (durationMs <= 0 || startVolume === targetVolume) {
+        audio.volume = targetVolume;
+        return;
+    }
+
+    return new Promise((resolve) => {
+        const startAt = window.performance.now();
+
+        const step = (now) => {
+            if (token !== activeMusicToken || audio !== activeMusicAudio) {
+                resolve();
+                return;
+            }
+
+            const progress = Math.min((now - startAt) / durationMs, 1);
+            audio.volume = startVolume + (targetVolume - startVolume) * progress;
+
+            if (progress < 1) {
+                audio.__fadeFrameId = window.requestAnimationFrame(step);
+                return;
+            }
+
+            audio.__fadeFrameId = null;
+            resolve();
+        };
+
+        audio.__fadeFrameId = window.requestAnimationFrame(step);
+    });
+}
+
+async function stopMusicPlayback({ fadeOut = true } = {}) {
+    const audio = activeMusicAudio;
+    const token = ++activeMusicToken;
+
+    if (!audio) {
+        return;
+    }
+
+    if (fadeOut && !audio.paused) {
+        await fadeMusicVolume(audio, 0, musicFadeDurationMs, token);
+    }
+
+    teardownMusicAudio(audio);
+    audio.pause();
+    audio.currentTime = 0;
+
+    if (activeMusicAudio === audio) {
+        activeMusicAudio = null;
+    }
+}
+
+function bindLoopingPlayback(audio, token) {
+    const restartTrack = async () => {
+        if (token !== activeMusicToken || audio !== activeMusicAudio || audio.__loopTransitioning) {
+            return;
+        }
+
+        audio.__loopTransitioning = true;
+
+        const remainingSeconds = Number.isFinite(audio.duration)
+            ? Math.max(audio.duration - audio.currentTime, 0)
+            : 0;
+        const fadeOutDurationMs =
+            remainingSeconds > 0
+                ? Math.min(musicFadeDurationMs, Math.max(remainingSeconds * 1000 - 50, 200))
+                : 0;
+
+        await fadeMusicVolume(audio, 0, fadeOutDurationMs, token);
+
+        if (token !== activeMusicToken || audio !== activeMusicAudio) {
+            return;
+        }
+
+        audio.currentTime = 0;
+
+        try {
+            if (audio.paused) {
+                await audio.play();
+            }
+        } catch {
+            audio.__loopTransitioning = false;
+            return;
+        }
+
+        await fadeMusicVolume(audio, musicMaxVolume, musicFadeDurationMs, token);
+
+        if (token === activeMusicToken && audio === activeMusicAudio) {
+            audio.__loopTransitioning = false;
+        }
+    };
+
+    audio.__loopHandler = () => {
+        if (!Number.isFinite(audio.duration) || audio.duration <= 0) {
+            return;
+        }
+
+        const remainingSeconds = audio.duration - audio.currentTime;
+        if (remainingSeconds <= musicLoopLeadSeconds) {
+            void restartTrack();
+        }
+    };
+
+    audio.__endedHandler = () => {
+        void restartTrack();
+    };
+
+    audio.addEventListener("timeupdate", audio.__loopHandler);
+    audio.addEventListener("ended", audio.__endedHandler);
+}
+
+async function playLetterMusic(letter) {
+    const musicUrl = getLetterMusicUrl(letter);
+
+    if (!musicUrl) {
+        await stopMusicPlayback();
+        return;
+    }
+
+    await stopMusicPlayback();
+
+    const token = ++activeMusicToken;
+    const audio = new Audio(musicUrl);
+    audio.preload = "auto";
+    audio.volume = 0;
+    activeMusicAudio = audio;
+
+    bindLoopingPlayback(audio, token);
+
+    try {
+        await audio.play();
+        await fadeMusicVolume(audio, musicMaxVolume, musicFadeDurationMs, token);
+    } catch {
+        teardownMusicAudio(audio);
+        if (activeMusicAudio === audio) {
+            activeMusicAudio = null;
+        }
+    }
+}
+
 async function fetchLetter(passcode) {
-    await sleep(2000);
+    await sleep(1000);
 
     const abortController = new AbortController();
     const timeoutId = window.setTimeout(() => {
@@ -90,26 +328,32 @@ function renderLetter(letter) {
     paperContent.appendChild(signature);
 }
 
-function startSignalCaptureAnimation() {
+async function startSignalCaptureAnimation() {
+    const token = ++signalAnimationToken;
+
     signalFrameIndex = 0;
     pwdInput.value = signalFrames[signalFrameIndex];
 
-    signalFrameTimer = window.setInterval(() => {
+    while (token === signalAnimationToken) {
+        await sleep(220);
+
+        if (token !== signalAnimationToken) {
+            return;
+        }
+
         signalFrameIndex = (signalFrameIndex + 1) % signalFrames.length;
         pwdInput.value = signalFrames[signalFrameIndex];
-    }, 220);
+    }
 }
 
 function stopSignalCaptureAnimation() {
-    if (signalFrameTimer !== null) {
-        window.clearInterval(signalFrameTimer);
-        signalFrameTimer = null;
-    }
+    signalAnimationToken += 1;
 }
 
 function resetTransmissionState() {
     hasTransmissionError = false;
     stopSignalCaptureAnimation();
+    stopSpectrumAnimation();
     submitBtn.disabled = false;
     pwdInput.disabled = false;
     pwdInput.style.pointerEvents = "auto";
@@ -121,6 +365,7 @@ function resetTransmissionState() {
 function showTransmissionError(message) {
     hasTransmissionError = true;
     stopSignalCaptureAnimation();
+    stopSpectrumAnimation();
     powerLight.classList.remove("loading");
     powerLight.classList.add("error");
     pwdInput.value = message;
@@ -142,23 +387,27 @@ submitBtn.addEventListener("click", async () => {
 
     const passcode = pwdInput.value.trim();
     hasTransmissionError = false;
+    stopSpectrumAnimation();
+    triggerHapticFeedback(hapticPatterns.confirm);
 
     submitBtn.disabled = true;
     pwdInput.disabled = true;
     pwdInput.style.pointerEvents = "none";
-    startSignalCaptureAnimation();
+    void startSignalCaptureAnimation();
     powerLight.classList.remove("ready");
     powerLight.classList.add("loading");
 
     try {
         const letter = await fetchLetter(passcode);
         renderLetter(letter);
+        void playLetterMusic(letter);
 
         await sleep(1200);
         stopSignalCaptureAnimation();
         pwdInput.value = "已就绪";
         powerLight.classList.remove("loading");
         powerLight.classList.add("ready");
+        triggerHapticFeedback(hapticPatterns.success);
 
         // 弹出纸张头部
         paper.style.transition = "transform 2s cubic-bezier(0.19, 1, 0.22, 1)";
@@ -171,6 +420,7 @@ submitBtn.addEventListener("click", async () => {
         isPrinted = true;
     } catch (error) {
         if (error && error.name === "AbortError") {
+            triggerHapticFeedback(hapticPatterns.error);
             showTransmissionError("传输超时");
             return;
         }
@@ -180,10 +430,12 @@ submitBtn.addEventListener("click", async () => {
         powerLight.classList.add("error");
 
         if (error && error.name === "BackendError") {
+            triggerHapticFeedback(hapticPatterns.error);
             showTransmissionError(abbreviateDetail(error.message));
             return;
         }
 
+        triggerHapticFeedback(hapticPatterns.error);
         showTransmissionError("传输发生错误");
     }
 });
@@ -230,6 +482,7 @@ paper.addEventListener("pointerup", () => {
     // 可以在这里加一点点惯性或对齐逻辑
     // 目前保持不动，增强物理停留感
     if (currentTranslateY < 80) {
-        pwdInput.value = "阅读模式";
+        pwdInput.value = "";
+        void startSpectrumAnimation();
     }
 });
