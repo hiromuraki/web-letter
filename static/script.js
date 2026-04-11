@@ -3,8 +3,6 @@ function sleep(ms) {
 }
 
 async function fetchLetter(passcode) {
-    await sleep(1000);
-
     const abortController = new AbortController();
     const timeoutId = window.setTimeout(() => {
         abortController.abort();
@@ -354,7 +352,10 @@ const MachineController = ({ lcdScreen, powerLight, paper, speaker }) => {
         powerLight.loading();
 
         try {
+            await sleep(1000);
             const letter = await fetchLetter(passcode);
+            await sleep(1000);
+
             paper.renderLetter(letter);
 
             lcdScreen.displayText("已就绪");

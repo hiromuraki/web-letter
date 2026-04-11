@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"encoding/json"
+	"io"
 	"io/fs"
 	"log"
 	"net/http"
@@ -103,12 +104,17 @@ func registerLetterApiRoute() {
 			return
 		}
 
-		// 解析前端传来的 JSON
+		// 读取请求体内容用于日志
 		var req UnlockRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		var bodyCopy strings.Builder
+		tee := io.TeeReader(r.Body, &bodyCopy)
+		if err := json.NewDecoder(tee).Decode(&req); err != nil {
 			writeJSONError(w, http.StatusBadRequest, "请求数据格式有误")
 			return
 		}
+
+		// 简单打印访问记录
+		log.Printf("[访问记录] %s %s 请求体: %s", time.Now().Format("2006-01-02 15:04:05"), r.RemoteAddr, bodyCopy.String())
 
 		// 获取信件内容 (如果文件不存在或加载失败，这里 cache.Get() 可能返回 nil)
 		letter := letterCache.Get()
