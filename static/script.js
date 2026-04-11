@@ -17,7 +17,7 @@ async function fetchLetter(passcode) {
                 "Content-Type": "application/json",
             },
             body: JSON.stringify({
-                password: passcode,
+                passCode: passcode,
             }),
             signal: abortController.signal,
         });
@@ -452,8 +452,9 @@ const MachineController = ({ lcdScreen, powerLight, paper, speaker }) => {
             paper.renderLetter(letter);
 
             lcdScreen.displayText("已就绪");
-            lcdScreen.stopSignalCaptureAnimation();
             powerLight.ready();
+            lcdScreen.stopSignalCaptureAnimation();
+            triggerHapticFeedback(hapticPatterns.success);
 
             await paper.showLetterReady();
 
@@ -462,8 +463,6 @@ const MachineController = ({ lcdScreen, powerLight, paper, speaker }) => {
             void lcdScreen.startSpectrumAnimation();
 
             resetButton.disabled = false;
-
-            triggerHapticFeedback(hapticPatterns.success);
         } catch (error) {
             console.error(error);
             if (error && error.name === "AbortError") {

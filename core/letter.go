@@ -12,11 +12,12 @@ import (
 
 // Letter 结构体
 type Letter struct {
-	Title   string `json:"title"`
-	Avatar  string `json:"avatar"`
-	Content string `json:"content"`
-	Sign    string `json:"sign"`
-	Music   string `json:"music"`
+	Title    string `json:"title"`
+	Avatar   string `json:"avatar"`
+	Content  string `json:"content"`
+	Sign     string `json:"sign"`
+	Music    string `json:"music"`
+	PassCode string `json:"passCode"`
 }
 
 // LetterCache 是我们的“智能信箱”
@@ -47,9 +48,7 @@ func parseLetter(filePath string) (*Letter, error) {
 
 		if !isContentSection {
 			// 阶段一：解析头部信息
-			// strings.HasPrefix 是 Go 处理前缀匹配的神器
 			if after, ok := strings.CutPrefix(line, "TITLE:"); ok {
-				// strings.TrimPrefix 可以直接砍掉前缀，剩下后面的值
 				letter.Title = strings.TrimSpace(after)
 			} else if after, ok := strings.CutPrefix(line, "SIGN:"); ok {
 				letter.Sign = strings.TrimSpace(after)
@@ -57,8 +56,10 @@ func parseLetter(filePath string) (*Letter, error) {
 				letter.Avatar = strings.TrimSpace(after)
 			} else if after, ok := strings.CutPrefix(line, "MUSIC:"); ok {
 				letter.Music = strings.TrimSpace(after)
-			} else if line == "" && letter.Title != "" {
-				// 遇到空行，且必要的头信息已解析，标记进入正文阶段
+			} else if after, ok := strings.CutPrefix(line, "PASSCODE:"); ok {
+				letter.PassCode = strings.TrimSpace(after)
+			} else if line == "" {
+				// 遇到空行，标记进入正文阶段
 				isContentSection = true
 			}
 		} else {

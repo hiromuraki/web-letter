@@ -14,7 +14,7 @@ import (
 
 // 义与前端交互的数据结构
 type UnlockRequest struct {
-	Password string `json:"password"`
+	PassCode string `json:"passCode"`
 }
 
 // 异常的 JSON 格式 {"detail": "..."}
@@ -30,25 +30,20 @@ func writeJSONError(w http.ResponseWriter, statusCode int, detail string) {
 }
 
 type Config struct {
-	LetterFile     string
-	LetterPassword string
-	Port           string
+	LetterFile string
+	Port       string
 }
 
 var config Config
 
 func loadConfig() Config {
 	config := Config{
-		LetterFile:     os.Getenv("LETTER_FILE"),
-		LetterPassword: os.Getenv("LETTER_PASSWORD"),
-		Port:           os.Getenv("PORT"),
+		LetterFile: os.Getenv("LETTER_FILE"),
+		Port:       os.Getenv("PORT"),
 	}
 
 	if config.LetterFile == "" {
 		config.LetterFile = "/data/letter"
-	}
-	if config.LetterPassword == "" {
-		config.LetterPassword = "000000"
 	}
 	if config.Port == "" {
 		config.Port = "8000"
@@ -95,16 +90,16 @@ func registerLetterApiRoute() {
 			return
 		}
 
-		// 校验密码
-		if strings.TrimSpace(req.Password) != config.LetterPassword {
-			writeJSONError(w, http.StatusBadRequest, "口令无效哦")
-			return
-		}
-
 		// 获取信件内容 (如果文件不存在或加载失败，这里 cache.Get() 可能返回 nil)
 		letter := letterCache.Get()
 		if letter == nil {
 			writeJSONError(w, http.StatusInternalServerError, "当前没有信件哦")
+			return
+		}
+
+		// 校验密码
+		if strings.TrimSpace(req.PassCode) != letter.PassCode {
+			writeJSONError(w, http.StatusBadRequest, "口令无效哦")
 			return
 		}
 

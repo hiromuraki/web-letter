@@ -10,9 +10,7 @@ spec:
           image: "ghcr.io/hiromuraki/web-letter:latest"
           env:
               - name: LETTER_FILE
-                value: "/data/letter.txt"
-              - name: LETTER_PASSWORD
-                value: "your-secret-key"
+                value: "/data/letter"
           ports:
               - containerPort: 8000
                 hostPort: 8032
