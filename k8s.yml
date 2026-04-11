@@ -11,6 +11,8 @@ spec:
           env:
               - name: LETTER_FILE
                 value: "/data/letter"
+              - name: FILES_DIR
+                value: "/data/files/"
           ports:
               - containerPort: 8000
                 hostPort: 8032

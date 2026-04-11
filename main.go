@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 	"web-letter-go/core"
@@ -29,8 +30,23 @@ func writeJSONError(w http.ResponseWriter, statusCode int, detail string) {
 	json.NewEncoder(w).Encode(ErrorResponse{Detail: detail})
 }
 
+func normalizeAssetURL(assetPath string) string {
+	trimmed := strings.TrimSpace(assetPath)
+	if trimmed == "" {
+		return ""
+	}
+
+	lowerValue := strings.ToLower(trimmed)
+	if strings.HasPrefix(trimmed, "/") || strings.HasPrefix(lowerValue, "http://") || strings.HasPrefix(lowerValue, "https://") || strings.HasPrefix(lowerValue, "data:") {
+		return trimmed
+	}
+
+	return "/files/" + strings.TrimLeft(trimmed, "/")
+}
+
 type Config struct {
 	LetterFile string
+	FilesDir   string
 	Port       string
 }
 
@@ -39,11 +55,15 @@ var config Config
 func loadConfig() Config {
 	config := Config{
 		LetterFile: os.Getenv("LETTER_FILE"),
+		FilesDir:   os.Getenv("FILES_DIR"),
 		Port:       os.Getenv("PORT"),
 	}
 
 	if config.LetterFile == "" {
 		config.LetterFile = "/data/letter"
+	}
+	if config.FilesDir == "" {
+		config.FilesDir = "/data/files"
 	}
 	if config.Port == "" {
 		config.Port = "8000"
@@ -103,10 +123,37 @@ func registerLetterApiRoute() {
 			return
 		}
 
+		responseLetter := *letter
+		responseLetter.Avatar = normalizeAssetURL(responseLetter.Avatar)
+		responseLetter.Music = normalizeAssetURL(responseLetter.Music)
+
 		// 校验通过，返回 200 OK 和信件 JSON
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(letter)
+		json.NewEncoder(w).Encode(responseLetter)
 	})
+}
+
+func registerFileServerRoute() {
+	cleanFilesDir := filepath.Clean(strings.TrimSpace(config.FilesDir))
+	if cleanFilesDir == "" || cleanFilesDir == "." {
+		log.Printf("未启用 /files 路由: FILES_DIR 未配置")
+		return
+	}
+
+	if info, err := os.Stat(cleanFilesDir); err != nil {
+		log.Printf("/files 路由已注册，但目录暂不可用 (%s): %v", cleanFilesDir, err)
+	} else if !info.IsDir() {
+		log.Printf("未启用 /files 路由: FILES_DIR 不是目录 (%s)", cleanFilesDir)
+		return
+	}
+
+	fileServer := http.StripPrefix("/files/", http.FileServer(http.Dir(cleanFilesDir)))
+	http.Handle("/files/", fileServer)
+	http.HandleFunc("/files", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/files/", http.StatusPermanentRedirect)
+	})
+
+	log.Printf("文件服务已启用: /files/** -> %s", cleanFilesDir)
 }
 
 func main() {
@@ -114,6 +161,7 @@ func main() {
 
 	registerStaticFilesRoute()
 	registerLetterApiRoute()
+	registerFileServerRoute()
 
 	log.Printf("🚀 服务器已启动 (Port=%s)", config.Port)
 	err := http.ListenAndServe(":"+config.Port, nil)
