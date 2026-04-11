@@ -440,7 +440,7 @@ const LetterContent = () => {
 
         const signature = document.createElement("p");
         signature.className = "letter-signature";
-        signature.innerText = `${letter.sign}`;
+        signature.innerText = `—— ${letter.sign}`;
         contentE.appendChild(signature);
     };
 
