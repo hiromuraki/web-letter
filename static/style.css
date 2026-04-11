@@ -296,6 +296,13 @@ input {
     text-shadow: 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
+.machine-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+}
+
 /* 红色功能按钮 */
 button {
     background: linear-gradient(180deg, var(--accent-red-light), var(--accent-red));
@@ -313,6 +320,35 @@ button {
         transform 0.1s,
         box-shadow 0.1s,
         filter 0.1s;
+}
+#submitBtn {
+    min-width: 108px;
+}
+
+#resetBtn {
+    min-width: 92px;
+    background: linear-gradient(180deg, #d9d1c5, #b7aea1);
+    color: #5d4b3d;
+    box-shadow:
+        0 5px 0 #8a7a69,
+        0 12px 20px rgba(78, 64, 46, 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+#resetBtn:active {
+    box-shadow:
+        0 3px 0 #8a7a69,
+        0 8px 14px rgba(78, 64, 46, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+button:disabled {
+    cursor: default;
+    filter: saturate(0.4) brightness(0.95);
+    box-shadow:
+        0 4px 0 #7a5b59,
+        0 10px 18px rgba(93, 9, 4, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 button:active {
     transform: translateY(2px);

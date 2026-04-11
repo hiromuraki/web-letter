@@ -45,7 +45,8 @@ async function fetchLetter(passcode) {
     }
 }
 
-const createBackgroundMusicController = () => {
+// 传真机::扬声器
+const Speaker = () => {
     let activeMusicToken = 0;
     let activeMusicAudio = null;
     const musicFadeDurationMs = 1800;
@@ -227,28 +228,11 @@ const createBackgroundMusicController = () => {
         }
     };
 
-    return [playMusic, stopMusic];
+    return { playMusic, stopMusic };
 };
 
-const [playMusic, stopMusic] = createBackgroundMusicController();
-
-// 传真机控制器
-const MachineController = ({ submitButton, inputBox, lcdScreen, powerLight, onLetterReceived }) => {
-    let hasTransmissionError = false;
-    const hapticPatterns = {
-        confirm: 50,
-        success: [30, 50, 30],
-        error: [40, 60, 40],
-    };
-
-    const triggerHapticFeedback = (pattern) => {
-        if (typeof navigator === "undefined" || typeof navigator.vibrate !== "function") {
-            return;
-        }
-
-        navigator.vibrate(pattern);
-    };
-
+// 传真机::状态显示屏
+const LcdScreen = () => {
     const SignalCaptureAnimation = (() => {
         const signalFrames = [
             "信号传输 ▇ ▃ ▃",
@@ -327,25 +311,117 @@ const MachineController = ({ submitButton, inputBox, lcdScreen, powerLight, onLe
         return { start, stop };
     })();
 
-    const showTransmissionError = (message) => {
-        hasTransmissionError = true;
-        SignalCaptureAnimation.stop();
-        SpectrumAnimation.stop();
-        powerLight.classList.remove("loading");
-        powerLight.classList.add("error");
-        inputBox.value = message;
+    const inputBox = document.getElementById("pwdInput");
+
+    const getText = () => {
+        return inputBox.value;
     };
 
-    const resetTransmissionState = () => {
-        hasTransmissionError = false;
-        SignalCaptureAnimation.stop();
-        SpectrumAnimation.stop();
-        submitButton.disabled = false;
+    const displayText = (text) => {
+        inputBox.value = text;
+    };
+
+    const toReadonly = () => {
+        inputBox.disabled = true;
+        inputBox.style.pointerEvents = "none";
+    };
+
+    const toEditable = () => {
         inputBox.disabled = false;
         inputBox.style.pointerEvents = "auto";
-        powerLight.classList.remove("loading", "ready", "error");
+    };
+
+    const reset = () => {
+        SignalCaptureAnimation.stop();
+        SpectrumAnimation.stop();
+        inputBox.disabled = false;
+        inputBox.style.pointerEvents = "auto";
         inputBox.value = "";
-        inputBox.focus();
+    };
+
+    return {
+        reset,
+        displayText,
+        getText,
+        toReadonly,
+        toEditable,
+        startSpectrumAnimation: SpectrumAnimation.start,
+        stopSpectrumAnimation: SpectrumAnimation.stop,
+        startSignalCaptureAnimation: SignalCaptureAnimation.start,
+        stopSignalCaptureAnimation: SignalCaptureAnimation.stop,
+    };
+};
+
+// 传真机::状态指示灯
+const PowerLight = () => {
+    const powerLight = document.getElementById("powerLight");
+
+    const idle = () => {
+        powerLight.classList.remove("loading", "ready", "error");
+    };
+
+    const loading = () => {
+        powerLight.classList.remove("loading", "ready", "error");
+        powerLight.classList.add("loading");
+    };
+
+    const ready = () => {
+        powerLight.classList.remove("loading", "ready", "error");
+        powerLight.classList.add("ready");
+    };
+
+    const error = () => {
+        powerLight.classList.remove("loading", "ready", "error");
+        powerLight.classList.add("error");
+    };
+
+    return {
+        idle,
+        loading,
+        ready,
+        error,
+    };
+};
+
+// 传真机
+const MachineController = ({ lcdScreen, powerLight, paper, speaker }) => {
+    let hasTransmissionError = false;
+    const hapticPatterns = {
+        confirm: 50,
+        success: [30, 50, 30],
+        error: [40, 60, 40],
+    };
+    const submitButton = document.getElementById("submitBtn");
+    const resetButton = document.getElementById("resetBtn");
+
+    const triggerHapticFeedback = (pattern) => {
+        if (typeof navigator === "undefined" || typeof navigator.vibrate !== "function") {
+            return;
+        }
+
+        navigator.vibrate(pattern);
+    };
+
+    const showTransmissionError = (message) => {
+        hasTransmissionError = true;
+
+        lcdScreen.reset();
+        powerLight.error();
+
+        lcdScreen.displayText(message);
+        lcdScreen.toReadonly();
+    };
+
+    const resetTransmissionState = async () => {
+        hasTransmissionError = false;
+
+        await speaker.stopMusic();
+        paper.reset();
+        lcdScreen.reset();
+        powerLight.idle();
+
+        submitButton.disabled = false;
+        resetButton.disabled = false;
     };
 
     const onSubmitButtonClick = async () => {
@@ -359,44 +435,47 @@ const MachineController = ({ submitButton, inputBox, lcdScreen, powerLight, onLe
             return text.length <= maxLength ? text : `${text.slice(0, maxLength)}...`;
         };
 
-        const passcode = inputBox.value.trim();
-        if (passcode.length === 0) {
-            return;
-        }
+        const passcode = lcdScreen.getText().trim();
 
         hasTransmissionError = false;
-        SignalCaptureAnimation.stop();
-
         submitButton.disabled = true;
-        inputBox.disabled = true;
-        inputBox.style.pointerEvents = "none";
-        void SignalCaptureAnimation.start();
-        powerLight.classList.remove("ready");
-        powerLight.classList.add("loading");
+        resetButton.disabled = true;
+
+        lcdScreen.reset();
+        lcdScreen.toReadonly();
+        void lcdScreen.startSignalCaptureAnimation();
+
+        powerLight.loading();
 
         try {
             const letter = await fetchLetter(passcode);
+            paper.renderLetter(letter);
 
-            await sleep(1200);
+            lcdScreen.displayText("已就绪");
+            lcdScreen.stopSignalCaptureAnimation();
+            powerLight.ready();
 
-            SignalCaptureAnimation.stop();
-            inputBox.value = "已就绪";
-            powerLight.classList.remove("loading");
-            powerLight.classList.add("ready");
+            await paper.showLetterReady();
+
+            void speaker.playMusic(letter.music);
+            await sleep(1000);
+            void lcdScreen.startSpectrumAnimation();
+
+            resetButton.disabled = false;
+
             triggerHapticFeedback(hapticPatterns.success);
-
-            onLetterReceived(letter);
         } catch (error) {
             console.error(error);
             if (error && error.name === "AbortError") {
+                resetButton.disabled = false;
                 triggerHapticFeedback(hapticPatterns.error);
                 showTransmissionError("传输超时");
                 return;
             }
 
-            SignalCaptureAnimation.stop();
-            powerLight.classList.remove("loading");
-            powerLight.classList.add("error");
+            lcdScreen.stopSignalCaptureAnimation();
+            powerLight.error();
+            resetButton.disabled = false;
 
             if (error && error.name === "BackendError") {
                 triggerHapticFeedback(hapticPatterns.error);
@@ -409,32 +488,62 @@ const MachineController = ({ submitButton, inputBox, lcdScreen, powerLight, onLe
         }
     };
 
-    const onLcdScreenClick = () => {
-        if (!hasTransmissionError) {
+    const onResetButtonClick = async () => {
+        if (resetButton.disabled) {
             return;
         }
 
-        resetTransmissionState();
+        await resetTransmissionState();
     };
 
     const bind = () => {
         submitButton.addEventListener("click", onSubmitButtonClick);
-        lcdScreen.addEventListener("click", onLcdScreenClick);
+        resetButton.addEventListener("click", onResetButtonClick);
     };
 
     return {
         bind,
         showTransmissionError,
         resetTransmissionState,
-        startSpectrumAnimation: SpectrumAnimation.start,
-        stopSpectrumAnimation: SpectrumAnimation.stop,
-        startSignalCaptureAnimation: SignalCaptureAnimation.start,
-        stopSignalCaptureAnimation: SignalCaptureAnimation.stop,
     };
 };
 
-// 信件交互控制器
-const PageController = ({ paper, pullHint }) => {
+// 信件::信件内容
+const LetterContent = () => {
+    const render = (letter) => {
+        const avatarE = document.getElementById("letterAvatar");
+        const titleE = document.getElementById("letterTitle");
+        const dateE = document.getElementById("letterDate");
+        const contentE = document.getElementById("paperContent");
+
+        avatarE.src = letter.avatar;
+        titleE.innerText = letter.title;
+        dateE.innerText = new Date().toLocaleString();
+
+        contentE.innerHTML = "";
+
+        const paragraphs = letter.content
+            .split(/\n+/)
+            .map((line) => line.trim())
+            .filter(Boolean);
+
+        for (const paragraphText of paragraphs) {
+            const paragraph = document.createElement("p");
+            paragraph.innerText = paragraphText;
+            contentE.appendChild(paragraph);
+        }
+
+        const signature = document.createElement("p");
+        signature.className = "letter-signature";
+        signature.innerText = `${letter.sign}`;
+        contentE.appendChild(signature);
+    };
+
+    return { render };
+};
+
+// 信件
+const PaperController = ({ paper, pullHint, letterContent }) => {
     let isPrinted = false;
     let startY = 0;
     let startTranslateY = 0;
@@ -443,6 +552,10 @@ const PageController = ({ paper, pullHint }) => {
     const setPaperTranslate = (nextY) => {
         currentTranslateY = nextY;
         paper.style.transform = `translateY(${currentTranslateY}%)`;
+    };
+
+    const renderLetter = (letter) => {
+        letterContent.render(letter);
     };
 
     const showLetterReady = async () => {
@@ -502,86 +615,58 @@ const PageController = ({ paper, pullHint }) => {
         setPaperTranslate(nextY);
     };
 
+    const onPointerUp = (event) => {
+        startY = 0;
+
+        if (event && typeof paper.releasePointerCapture === "function") {
+            try {
+                paper.releasePointerCapture(event.pointerId);
+            } catch {
+                // Ignore release failures when capture is already cleared.
+            }
+        }
+    };
+
     const bind = () => {
         paper.addEventListener("pointerdown", onPointerDown);
         paper.addEventListener("pointermove", onPointerMove);
-    };
-
-    const unbind = () => {
-        paper.removeEventListener("pointerdown", onPointerDown);
-        paper.removeEventListener("pointermove", onPointerMove);
+        paper.addEventListener("pointerup", onPointerUp);
+        paper.addEventListener("pointercancel", onPointerUp);
     };
 
     return {
         bind,
-        unbind,
         reset,
+        renderLetter,
         showLetterReady,
-        getCurrentTranslateY: () => currentTranslateY,
-        isReadyToRead: () => isPrinted,
     };
 };
 
-// 信件渲染器
-const LetterBody = ({ date, title, avatar, content }) => {
-    const render = (letter) => {
-        avatar.src = letter.avatar;
-        title.innerText = letter.title;
-        date.innerText = new Date().toLocaleString();
+const AppController = () => {
+    const paperController = PaperController({
+        paper: document.getElementById("paper"),
+        pullHint: document.getElementById("pullHint"),
+        letterContent: LetterContent(),
+    });
 
-        content.innerHTML = "";
+    const machineController = MachineController({
+        lcdScreen: LcdScreen(),
+        powerLight: PowerLight(),
+        speaker: Speaker(),
+        paper: paperController,
+    });
 
-        const paragraphs = letter.content
-            .split(/\n+/)
-            .map((line) => line.trim())
-            .filter(Boolean);
+    const run = () => {
+        paperController.bind();
+        paperController.reset();
 
-        for (const paragraphText of paragraphs) {
-            const paragraph = document.createElement("p");
-            paragraph.innerText = paragraphText;
-            content.appendChild(paragraph);
-        }
-
-        const signature = document.createElement("p");
-        signature.className = "letter-signature";
-        signature.innerText = `—— ${letter.sign}`;
-        content.appendChild(signature);
+        machineController.bind();
+        machineController.resetTransmissionState();
     };
 
-    return { render };
+    return {
+        run,
+    };
 };
 
-const AppController = () => {};
-
-const letterBody = LetterBody({
-    avatar: document.getElementById("letterAvatar"),
-    title: document.getElementById("letterTitle"),
-    date: document.getElementById("letterDate"),
-    content: document.getElementById("paperContent"),
-});
-
-const pageController = PageController({
-    paper: document.getElementById("paper"),
-    pullHint: document.getElementById("pullHint"),
-});
-
-pageController.bind();
-pageController.reset();
-
-const machineController = MachineController({
-    submitButton: document.getElementById("submitBtn"),
-    inputBox: document.getElementById("pwdInput"),
-    lcdScreen: document.querySelector(".lcd-screen"),
-    powerLight: document.getElementById("powerLight"),
-    page: pageController,
-    onLetterReceived: async (letter) => {
-        letterBody.render(letter);
-        await pageController.showLetterReady();
-        void playMusic(letter.music);
-        await sleep(2000);
-        machineController.startSpectrumAnimation();
-    },
-});
-
-machineController.bind();
-machineController.resetTransmissionState();
+AppController().run();
