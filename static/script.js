@@ -47,299 +47,94 @@ async function fetchLetter(passcode) {
 
 // 传真机::扬声器
 const Speaker = () => {
-    let activeMusicToken = 0;
-    let activeMusicAudio = null;
-    let pendingMusicRetry = false;
-    let requestedMusicUrl = "";
-    let isUnlockHandlersBound = false;
-    let unlockAudio = null;
-    const musicFadeDurationMs = 1800;
-    const musicMaxVolume = 0.4;
-    const musicLoopLeadSeconds = musicFadeDurationMs / 1000 + 0.15;
-    const silentAudioDataUrl =
-        "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+    const speakerElement = document.getElementById("machineSpeaker");
+    let pendingMusicUrl = "";
+    let primed = false;
 
-    const isAutoplayBlockError = (error) => {
-        if (!error) {
-            return false;
+    speakerElement.loop = true;
+    speakerElement.autoplay = false;
+    speakerElement.playsInline = true;
+
+    const clearPendingMusic = () => {
+        pendingMusicUrl = "";
+    };
+
+    const tryResumePendingMusic = async () => {
+        if (!pendingMusicUrl) {
+            return;
         }
 
-        const errorName = typeof error.name === "string" ? error.name : "";
-        const errorMessage = typeof error.message === "string" ? error.message.toLowerCase() : "";
-
-        return (
-            errorName === "NotAllowedError" ||
-            errorName === "NotSupportedError" ||
-            errorMessage.includes("user gesture") ||
-            errorMessage.includes("user activation") ||
-            errorMessage.includes("notallowederror")
-        );
-    };
-
-    const clearPendingMusicRetry = () => {
-        pendingMusicRetry = false;
-    };
-
-    const markMusicRetryPending = () => {
-        pendingMusicRetry = true;
+        try {
+            await speakerElement.play();
+            clearPendingMusic();
+        } catch {
+            // Keep pending state and wait for the next user activation.
+        }
     };
 
     const primePlayback = async () => {
-        if (!unlockAudio) {
-            unlockAudio = new Audio(silentAudioDataUrl);
-            unlockAudio.preload = "auto";
-            unlockAudio.volume = 0;
-            unlockAudio.muted = true;
+        if (primed) {
+            return;
         }
 
+        primed = true;
+        speakerElement.muted = true;
+
         try {
-            unlockAudio.currentTime = 0;
-            await unlockAudio.play();
-            unlockAudio.pause();
-            unlockAudio.currentTime = 0;
+            await speakerElement.play();
         } catch {
-            // Priming best-effort only.
+            // Some browsers still reject priming without a source; ignore it.
         }
+
+        speakerElement.pause();
+        speakerElement.currentTime = 0;
+        speakerElement.muted = false;
     };
 
-    const teardownMusicAudio = (audio) => {
-        if (!audio) {
-            return;
-        }
-
-        if (audio.__fadeFrameId) {
-            window.cancelAnimationFrame(audio.__fadeFrameId);
-            audio.__fadeFrameId = null;
-        }
-
-        if (audio.__loopHandler) {
-            audio.removeEventListener("timeupdate", audio.__loopHandler);
-            audio.__loopHandler = null;
-        }
-
-        if (audio.__endedHandler) {
-            audio.removeEventListener("ended", audio.__endedHandler);
-            audio.__endedHandler = null;
-        }
-
-        audio.__loopTransitioning = false;
+    const handleUserActivation = () => {
+        void primePlayback();
+        void tryResumePendingMusic();
     };
 
-    const retryBlockedMusicPlayback = async () => {
-        if (!pendingMusicRetry || !requestedMusicUrl || !activeMusicAudio) {
-            return;
-        }
+    window.addEventListener("pointerdown", handleUserActivation, { passive: true });
+    window.addEventListener("keydown", handleUserActivation);
+    document.addEventListener("WeixinJSBridgeReady", handleUserActivation);
 
-        const audio = activeMusicAudio;
-        const token = activeMusicToken;
-
-        try {
-            await audio.play();
-            clearPendingMusicRetry();
-            await fadeMusicVolume(audio, musicMaxVolume, musicFadeDurationMs, token);
-        } catch (error) {
-            if (!isAutoplayBlockError(error)) {
-                console.error("music retry failed", error);
-                clearPendingMusicRetry();
-            }
-        }
-    };
-
-    const bindUnlockHandlers = () => {
-        if (isUnlockHandlersBound) {
-            return;
-        }
-
-        isUnlockHandlersBound = true;
-
-        const onUserActivation = () => {
-            void primePlayback();
-            void retryBlockedMusicPlayback();
-        };
-
-        window.addEventListener("pointerdown", onUserActivation, { passive: true });
-        window.addEventListener("touchstart", onUserActivation, { passive: true });
-        window.addEventListener("keydown", onUserActivation);
-        window.addEventListener("pageshow", onUserActivation);
-        document.addEventListener("visibilitychange", () => {
-            if (document.visibilityState === "visible") {
-                onUserActivation();
-            }
-        });
-        document.addEventListener("WeixinJSBridgeReady", onUserActivation);
-    };
-
-    const fadeMusicVolume = async (audio, targetVolume, durationMs, token) => {
-        if (!audio) {
-            return;
-        }
-
-        if (audio.__fadeFrameId) {
-            window.cancelAnimationFrame(audio.__fadeFrameId);
-            audio.__fadeFrameId = null;
-        }
-
-        const startVolume = Number.isFinite(audio.volume) ? audio.volume : 0;
-        if (durationMs <= 0 || startVolume === targetVolume) {
-            audio.volume = targetVolume;
-            return;
-        }
-
-        return new Promise((resolve) => {
-            const startAt = window.performance.now();
-
-            const step = (now) => {
-                if (token !== activeMusicToken || audio !== activeMusicAudio) {
-                    resolve();
-                    return;
-                }
-
-                const progress = Math.min((now - startAt) / durationMs, 1);
-                audio.volume = startVolume + (targetVolume - startVolume) * progress;
-
-                if (progress < 1) {
-                    audio.__fadeFrameId = window.requestAnimationFrame(step);
-                    return;
-                }
-
-                audio.__fadeFrameId = null;
-                resolve();
-            };
-
-            audio.__fadeFrameId = window.requestAnimationFrame(step);
-        });
-    };
-
-    const stopMusic = async ({ fadeOut = true } = {}) => {
-        const audio = activeMusicAudio;
-        const token = ++activeMusicToken;
-        clearPendingMusicRetry();
-        requestedMusicUrl = "";
-
-        if (!audio) {
-            return;
-        }
-
-        if (fadeOut && !audio.paused) {
-            await fadeMusicVolume(audio, 0, musicFadeDurationMs, token);
-        }
-
-        teardownMusicAudio(audio);
-        audio.pause();
-        audio.currentTime = 0;
-        audio.removeAttribute("src");
-        audio.load();
-
-        if (activeMusicAudio === audio) {
-            activeMusicAudio = null;
-        }
-    };
-
-    const bindLoopingPlayback = (audio, token) => {
-        const restartTrack = async () => {
-            if (
-                token !== activeMusicToken ||
-                audio !== activeMusicAudio ||
-                audio.__loopTransitioning
-            ) {
-                return;
-            }
-
-            audio.__loopTransitioning = true;
-
-            const remainingSeconds = Number.isFinite(audio.duration)
-                ? Math.max(audio.duration - audio.currentTime, 0)
-                : 0;
-            const fadeOutDurationMs =
-                remainingSeconds > 0
-                    ? Math.min(musicFadeDurationMs, Math.max(remainingSeconds * 1000 - 50, 200))
-                    : 0;
-
-            await fadeMusicVolume(audio, 0, fadeOutDurationMs, token);
-
-            if (token !== activeMusicToken || audio !== activeMusicAudio) {
-                return;
-            }
-
-            audio.currentTime = 0;
-
-            try {
-                if (audio.paused) {
-                    await audio.play();
-                }
-            } catch {
-                audio.__loopTransitioning = false;
-                return;
-            }
-
-            await fadeMusicVolume(audio, musicMaxVolume, musicFadeDurationMs, token);
-
-            if (token === activeMusicToken && audio === activeMusicAudio) {
-                audio.__loopTransitioning = false;
-            }
-        };
-
-        audio.__loopHandler = () => {
-            if (!Number.isFinite(audio.duration) || audio.duration <= 0) {
-                return;
-            }
-
-            const remainingSeconds = audio.duration - audio.currentTime;
-            if (remainingSeconds <= musicLoopLeadSeconds) {
-                void restartTrack();
-            }
-        };
-
-        audio.__endedHandler = () => {
-            void restartTrack();
-        };
-
-        audio.addEventListener("timeupdate", audio.__loopHandler);
-        audio.addEventListener("ended", audio.__endedHandler);
+    const stopMusic = async () => {
+        clearPendingMusic();
+        speakerElement.pause();
+        speakerElement.removeAttribute("src");
+        speakerElement.load();
+        speakerElement.currentTime = 0;
     };
 
     const playMusic = async (musicUrl) => {
-        if (!musicUrl) {
+        const nextMusicUrl = String(musicUrl || "").trim();
+
+        if (!nextMusicUrl) {
             await stopMusic();
             return;
         }
 
-        await stopMusic();
+        if (speakerElement.src !== nextMusicUrl) {
+            speakerElement.src = nextMusicUrl;
+        }
 
-        const token = ++activeMusicToken;
-        requestedMusicUrl = musicUrl;
-        const audio = new Audio(musicUrl);
-        audio.preload = "auto";
-        audio.muted = false;
-        audio.volume = 0;
-        activeMusicAudio = audio;
-
-        bindLoopingPlayback(audio, token);
+        pendingMusicUrl = nextMusicUrl;
 
         try {
-            audio.load();
-            await audio.play();
-            clearPendingMusicRetry();
-            await fadeMusicVolume(audio, musicMaxVolume, musicFadeDurationMs, token);
+            await speakerElement.play();
+            clearPendingMusic();
         } catch (error) {
-            if (isAutoplayBlockError(error)) {
-                markMusicRetryPending();
+            if (error && error.name === "NotAllowedError") {
                 return;
             }
 
-            console.error("music playback failed", error);
-            teardownMusicAudio(audio);
-            clearPendingMusicRetry();
-            requestedMusicUrl = "";
-            if (activeMusicAudio === audio) {
-                activeMusicAudio = null;
-            }
+            throw error;
         }
     };
 
-    bindUnlockHandlers();
-
-    return { playMusic, stopMusic, primePlayback };
+    return { playMusic, stopMusic };
 };
 
 // 传真机::状态显示屏
@@ -548,8 +343,6 @@ const MachineController = ({ lcdScreen, powerLight, paper, speaker }) => {
 
         const passcode = lcdScreen.getText().trim();
 
-        void speaker.primePlayback();
-
         hasTransmissionError = false;
         submitButton.disabled = true;
         resetButton.disabled = true;
@@ -571,8 +364,8 @@ const MachineController = ({ lcdScreen, powerLight, paper, speaker }) => {
 
             await paper.showLetterReady();
 
-            void speaker.playMusic(letter.music);
             await sleep(1000);
+            void speaker.playMusic(letter.music);
             void lcdScreen.startSpectrumAnimation();
 
             resetButton.disabled = false;
