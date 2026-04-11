@@ -49,9 +49,58 @@ async function fetchLetter(passcode) {
 const Speaker = () => {
     let activeMusicToken = 0;
     let activeMusicAudio = null;
+    let pendingMusicRetry = false;
+    let requestedMusicUrl = "";
+    let isUnlockHandlersBound = false;
+    let unlockAudio = null;
     const musicFadeDurationMs = 1800;
     const musicMaxVolume = 0.4;
     const musicLoopLeadSeconds = musicFadeDurationMs / 1000 + 0.15;
+    const silentAudioDataUrl =
+        "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+
+    const isAutoplayBlockError = (error) => {
+        if (!error) {
+            return false;
+        }
+
+        const errorName = typeof error.name === "string" ? error.name : "";
+        const errorMessage = typeof error.message === "string" ? error.message.toLowerCase() : "";
+
+        return (
+            errorName === "NotAllowedError" ||
+            errorName === "NotSupportedError" ||
+            errorMessage.includes("user gesture") ||
+            errorMessage.includes("user activation") ||
+            errorMessage.includes("notallowederror")
+        );
+    };
+
+    const clearPendingMusicRetry = () => {
+        pendingMusicRetry = false;
+    };
+
+    const markMusicRetryPending = () => {
+        pendingMusicRetry = true;
+    };
+
+    const primePlayback = async () => {
+        if (!unlockAudio) {
+            unlockAudio = new Audio(silentAudioDataUrl);
+            unlockAudio.preload = "auto";
+            unlockAudio.volume = 0;
+            unlockAudio.muted = true;
+        }
+
+        try {
+            unlockAudio.currentTime = 0;
+            await unlockAudio.play();
+            unlockAudio.pause();
+            unlockAudio.currentTime = 0;
+        } catch {
+            // Priming best-effort only.
+        }
+    };
 
     const teardownMusicAudio = (audio) => {
         if (!audio) {
@@ -74,6 +123,50 @@ const Speaker = () => {
         }
 
         audio.__loopTransitioning = false;
+    };
+
+    const retryBlockedMusicPlayback = async () => {
+        if (!pendingMusicRetry || !requestedMusicUrl || !activeMusicAudio) {
+            return;
+        }
+
+        const audio = activeMusicAudio;
+        const token = activeMusicToken;
+
+        try {
+            await audio.play();
+            clearPendingMusicRetry();
+            await fadeMusicVolume(audio, musicMaxVolume, musicFadeDurationMs, token);
+        } catch (error) {
+            if (!isAutoplayBlockError(error)) {
+                console.error("music retry failed", error);
+                clearPendingMusicRetry();
+            }
+        }
+    };
+
+    const bindUnlockHandlers = () => {
+        if (isUnlockHandlersBound) {
+            return;
+        }
+
+        isUnlockHandlersBound = true;
+
+        const onUserActivation = () => {
+            void primePlayback();
+            void retryBlockedMusicPlayback();
+        };
+
+        window.addEventListener("pointerdown", onUserActivation, { passive: true });
+        window.addEventListener("touchstart", onUserActivation, { passive: true });
+        window.addEventListener("keydown", onUserActivation);
+        window.addEventListener("pageshow", onUserActivation);
+        document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "visible") {
+                onUserActivation();
+            }
+        });
+        document.addEventListener("WeixinJSBridgeReady", onUserActivation);
     };
 
     const fadeMusicVolume = async (audio, targetVolume, durationMs, token) => {
@@ -120,6 +213,8 @@ const Speaker = () => {
     const stopMusic = async ({ fadeOut = true } = {}) => {
         const audio = activeMusicAudio;
         const token = ++activeMusicToken;
+        clearPendingMusicRetry();
+        requestedMusicUrl = "";
 
         if (!audio) {
             return;
@@ -132,6 +227,8 @@ const Speaker = () => {
         teardownMusicAudio(audio);
         audio.pause();
         audio.currentTime = 0;
+        audio.removeAttribute("src");
+        audio.load();
 
         if (activeMusicAudio === audio) {
             activeMusicAudio = null;
@@ -210,25 +307,39 @@ const Speaker = () => {
         await stopMusic();
 
         const token = ++activeMusicToken;
+        requestedMusicUrl = musicUrl;
         const audio = new Audio(musicUrl);
         audio.preload = "auto";
+        audio.muted = false;
         audio.volume = 0;
         activeMusicAudio = audio;
 
         bindLoopingPlayback(audio, token);
 
         try {
+            audio.load();
             await audio.play();
+            clearPendingMusicRetry();
             await fadeMusicVolume(audio, musicMaxVolume, musicFadeDurationMs, token);
-        } catch {
+        } catch (error) {
+            if (isAutoplayBlockError(error)) {
+                markMusicRetryPending();
+                return;
+            }
+
+            console.error("music playback failed", error);
             teardownMusicAudio(audio);
+            clearPendingMusicRetry();
+            requestedMusicUrl = "";
             if (activeMusicAudio === audio) {
                 activeMusicAudio = null;
             }
         }
     };
 
-    return { playMusic, stopMusic };
+    bindUnlockHandlers();
+
+    return { playMusic, stopMusic, primePlayback };
 };
 
 // 传真机::状态显示屏
@@ -436,6 +547,8 @@ const MachineController = ({ lcdScreen, powerLight, paper, speaker }) => {
         };
 
         const passcode = lcdScreen.getText().trim();
+
+        void speaker.primePlayback();
 
         hasTransmissionError = false;
         submitButton.disabled = true;
